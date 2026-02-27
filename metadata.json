@@ -1,0 +1,5 @@
+{
+  "name": "Video Sorter",
+  "description": "Alat internal untuk menyortir ratusan video ke dalam kategori.",
+  "requestFramePermissions": []
+}
