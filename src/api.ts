@@ -20,6 +20,7 @@ export interface VideoData {
 export interface CategoryData {
   id: string;
   name: string;
+  detail?: string;
 }
 
 /**
@@ -49,11 +50,11 @@ export const fetchVideos = async (): Promise<VideoData[]> => {
   try {
     console.log('Fetching videos from:', GET_VIDEOS_URL);
     const response = await fetchWithTimeout(GET_VIDEOS_URL);
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const data = await response.json();
     console.log('API Response Data:', data);
 
@@ -123,11 +124,11 @@ export const fetchCategories = async (): Promise<CategoryData[]> => {
   try {
     console.log('Fetching categories from:', GET_CATEGORIES_URL);
     const response = await fetchWithTimeout(GET_CATEGORIES_URL);
-    
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const rawData = await response.json();
     console.log('Raw Categories Data from API:', rawData);
 
@@ -156,18 +157,19 @@ export const fetchCategories = async (): Promise<CategoryData[]> => {
       if (typeof item === 'string') {
         return { id: item.toLowerCase().replace(/\s+/g, '-'), name: item };
       }
-      
+
       // Handle n8n specific structure if it exists (item.json)
       // n8n often wraps the actual data in a 'json' property
       const actualItem = item.json || item;
-      
+
       // Prioritize "id" and "name" as requested by the user
       const name = actualItem.name || actualItem.Name || actualItem["Nama Kategori"] || actualItem.kategori || '';
       const id = String(actualItem.id || actualItem.ID || actualItem.row_number || (name ? name.toLowerCase().replace(/\s+/g, '-') : ''));
-      
-      return { id, name };
+      const detail = actualItem.detail || actualItem.Detail || actualItem.keterangan || actualItem.Keterangan || '';
+
+      return { id, name, detail };
     }).filter(cat => cat.name !== ''); // Filter out empty categories
-    
+
   } catch (error) {
     console.error('API Fetch Categories failed:', error);
     throw error; // Throw error so the UI can handle it
@@ -205,9 +207,9 @@ export const deleteCategory = async (categoryId: string) => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         id: categoryId,
-        categoryId: categoryId 
+        categoryId: categoryId
       }),
     });
 

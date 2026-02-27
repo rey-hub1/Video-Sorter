@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, User, Play, CheckCircle2, Loader2, LogOut, Menu, X, Settings, RefreshCw, Plus, Trash2, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, Play, CheckCircle2, Loader2, LogOut, Menu, X, Settings, RefreshCw, Plus, Trash2, Save, PartyPopper } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchVideos, submitCategory, fetchCategories, saveCategories, deleteCategory, VideoData, CategoryData } from './api';
 
-const USERS = ['User 1', 'User 2', 'User 3', 'User 4', 'User 5', 'User 6'];
+const USERS = ['Nazwar', 'Riski', 'Nuril', 'Narin', 'Alya', 'Desti', 'Atmin'];
 
 type View = 'SelectUser' | 'SortirVideo' | 'ManageCategory';
 
@@ -13,7 +13,9 @@ export default function App() {
   const [userVideos, setUserVideos] = useState<VideoData[]>([]);
   const [categories, setCategories] = useState<CategoryData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
   const [isLoading, setIsLoading] = useState(false);
+  const [iframeLoaded, setIframeLoaded] = useState<{ [key: string]: boolean }>({});
   const [selectingUser, setSelectingUser] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -165,11 +167,17 @@ export default function App() {
   };
 
   const goToPrev = () => {
-    if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
+    if (currentIndex > 0) {
+      setSlideDirection('left');
+      setCurrentIndex(currentIndex - 1);
+    }
   };
 
   const goToNext = () => {
-    if (currentIndex < userVideos.length - 1) setCurrentIndex(currentIndex + 1);
+    if (currentIndex < userVideos.length - 1) {
+      setSlideDirection('right');
+      setCurrentIndex(currentIndex + 1);
+    }
   };
 
   const getEmbedUrl = (url: string) => {
@@ -216,21 +224,10 @@ export default function App() {
     }
   };
 
-  const handleRemoveCategory = async (index: number) => {
-    const catToDelete = tempCategories[index];
-    // Optimistically remove from UI
+  const handleRemoveCategory = (index: number) => {
+    // Hanya hapus di UI (web) sementara, nanti disimpan ke server saat klik Save
     const updated = tempCategories.filter((_, i) => i !== index);
     setTempCategories(updated);
-    
-    // Call delete API
-    if (catToDelete.id) {
-      const result = await deleteCategory(catToDelete.id);
-      if (result.status === 'error') {
-        alert('Gagal menghapus kategori di server: ' + result.message);
-        // Rollback UI if needed, but usually optimistic is fine for UX unless it's critical
-        setTempCategories([...tempCategories]); 
-      }
-    }
   };
 
   const handleEditCategory = (index: number, newName: string) => {
@@ -299,7 +296,9 @@ export default function App() {
                 ) : (
                   <>
                     <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-slate-800 flex items-center justify-center group-hover:bg-indigo-500 transition-colors ${isLoading ? 'opacity-50' : ''}`}>
-                      <User className="w-5 h-5 md:w-6 md:h-6 text-slate-400 group-hover:text-white" />
+                      <span className="text-xl md:text-2xl font-black text-slate-400 group-hover:text-white uppercase transition-colors">
+                        {user.charAt(0)}
+                      </span>
                     </div>
                     <span className={`text-sm md:text-lg font-black text-white ${isLoading ? 'opacity-50' : ''}`}>{user}</span>
                   </>
@@ -347,39 +346,101 @@ export default function App() {
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-6">
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                placeholder="Nama kategori baru..."
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
-                onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-              />
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-8">
+            {/* Add New Category Section */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 flex flex-col gap-2">
+                <input 
+                  type="text" 
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder="Nama kategori baru..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base font-bold focus:outline-none focus:border-indigo-500 transition-colors text-white"
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                />
+                <input 
+                  type="text"
+                  placeholder="(Opsional) Detail / Keterangan tambahan singkat..."
+                  className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-2 text-xs focus:outline-none focus:border-indigo-500 transition-colors text-slate-300"
+                  id="newCatDetail" 
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+                />
+              </div>
               <button 
-                onClick={handleAddCategory}
-                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2"
+                onClick={() => {
+                  const detailInput = document.getElementById('newCatDetail') as HTMLInputElement;
+                  const detail = detailInput?.value || '';
+                  if (newCatName.trim()) {
+                    const exists = tempCategories.some(c => c.name.toLowerCase() === newCatName.trim().toLowerCase());
+                    if (!exists) {
+                      const maxId = tempCategories.reduce((max, cat) => {
+                        const idNum = parseInt(cat.id, 10);
+                        return !isNaN(idNum) ? Math.max(max, idNum) : max;
+                      }, 0);
+              
+                      const newCat: CategoryData = {
+                        id: String(maxId + 1),
+                        name: newCatName.trim(),
+                        detail: detail.trim()
+                      };
+                      setTempCategories([...tempCategories, newCat]);
+                      setNewCatName('');
+                      if (detailInput) detailInput.value = '';
+                    }
+                  }
+                }}
+                className="px-6 py-4 sm:py-auto h-full min-h-[50px] bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 self-start sm:self-stretch mt-auto sm:mt-0 w-full sm:w-auto"
               >
                 <Plus className="w-4 h-4" />
                 Tambah
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-4">
               {tempCategories.map((cat, idx) => (
-                <div key={cat.id || idx} className="flex items-center gap-2 group">
-                  <input 
-                    type="text" 
-                    value={cat.name}
-                    onChange={(e) => handleEditCategory(idx, e.target.value)}
-                    className="flex-1 bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
+                <div key={cat.id || idx} className="flex flex-col sm:flex-row items-center gap-3 group bg-slate-950/20 p-3 rounded-2xl border border-slate-800/50 hover:border-slate-800 transition-colors">
+                  
+                  {/* Inputs Container (Stacked) */}
+                  <div className="flex-1 w-full flex flex-col gap-2">
+                    <input 
+                      type="text" 
+                      value={cat.name}
+                      onChange={(e) => handleEditCategory(idx, e.target.value)}
+                      placeholder="Nama Kategori"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-base md:text-lg focus:outline-none focus:border-indigo-500 transition-colors font-bold text-white placeholder:font-normal"
+                    />
+                    <div className="flex items-start gap-2">
+                       <div className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 mt-1">
+                         <span className="text-[10px] text-slate-500">i</span>
+                       </div>
+                       <input 
+                         type="text" 
+                         value={cat.detail || ''}
+                         onChange={(e) => {
+                           const updated = [...tempCategories];
+                           updated[idx] = { ...updated[idx], detail: e.target.value };
+                           setTempCategories(updated);
+                         }}
+                         placeholder="Detail / Keterangan (Biarkan kosong jika tidak ada)"
+                         className="flex-1 bg-slate-950/30 border border-slate-800 rounded-lg px-4 py-2 text-xs focus:outline-none focus:border-indigo-500 transition-colors text-slate-300 placeholder:text-slate-600 font-medium"
+                       />
+                    </div>
+                  </div>
+
+                  {/* Actions */}
                   <button 
                     onClick={() => handleRemoveCategory(idx)}
-                    className="p-2 text-slate-500 hover:text-red-500 transition-colors"
+                    className="hidden sm:flex w-12 h-full min-h-[80px] bg-slate-900 border border-slate-800 rounded-xl items-center justify-center text-slate-500 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-500 transition-colors shrink-0"
+                    title="Hapus Kategori"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                  <button 
+                    onClick={() => handleRemoveCategory(idx)}
+                    className="w-full sm:hidden py-3 mt-1 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-xl flex items-center justify-center gap-2 transition-colors border border-red-500/20 font-bold text-xs"
                   >
                     <Trash2 className="w-4 h-4" />
+                    Hapus Kategori
                   </button>
                 </div>
               ))}
@@ -436,12 +497,6 @@ export default function App() {
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
-              <button 
-                onClick={handleLogout}
-                className="text-[10px] font-bold text-slate-500 hover:text-white uppercase tracking-widest"
-              >
-                Ganti
-              </button>
               <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-slate-500 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
@@ -462,11 +517,12 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
           {userVideos.map((video, index) => (
             <button
               key={`${video["ID File"]}-${index}`}
               onClick={() => {
+                setSlideDirection(index > currentIndex ? 'right' : 'left');
                 setCurrentIndex(index);
                 if (window.innerWidth < 1024) setIsSidebarOpen(false);
               }}
@@ -541,18 +597,70 @@ export default function App() {
               <ChevronLeft className="w-8 h-8" />
             </button>
 
-            <div className="flex-1 w-full h-full min-h-[250px] md:min-h-0 bg-black rounded-2xl md:rounded-[2.5rem] overflow-hidden border border-slate-800 shadow-2xl relative">
-              <AnimatePresence mode="wait">
-                <motion.iframe
+            <div className="flex-1 w-full aspect-video min-h-[250px] md:min-h-0 bg-black rounded-2xl md:rounded-[2.5rem] overflow-hidden border border-slate-800 shadow-2xl relative md:max-h-[70vh]">
+              
+              {/* All Done Empty State */}
+              <AnimatePresence>
+                {stats.total > 0 && stats.done === stats.total && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-slate-900 to-slate-900 p-8 text-center"
+                  >
+                    <div className="w-24 h-24 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6">
+                      <PartyPopper className="w-12 h-12 text-emerald-500" />
+                    </div>
+                    <h2 className="text-3xl font-black text-white tracking-tighter italic mb-2">KERJA <span className="text-emerald-500">BAGUS!</span></h2>
+                    <p className="text-slate-400 text-sm max-w-sm">Anda telah menyelesaikan penyortiran untuk semua daftar video yang ditugaskan kepada Anda saat ini.</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Video Player Render */}
+              <AnimatePresence initial={false} custom={slideDirection}>
+                <motion.div
                   key={currentVideo?.["ID File"]}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  src={getEmbedUrl(currentVideo?.["Link Preview"] || '')}
+                  custom={slideDirection}
+                  initial={(direction) => ({
+                    x: direction === 'right' ? '100%' : '-100%',
+                    opacity: 0,
+                    scale: 0.9
+                  })}
+                  animate={{
+                    x: 0,
+                    opacity: 1,
+                    scale: 1,
+                  }}
+                  exit={(direction) => ({
+                    x: direction === 'right' ? '-100%' : '100%',
+                    opacity: 0,
+                    scale: 0.9
+                  })}
+                  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                   className="absolute inset-0 w-full h-full"
-                  allow="autoplay; fullscreen"
-                  frameBorder="0"
-                />
+                >
+                  {/* Loading Skeleton underneath iframe */}
+                  <div className={`absolute inset-0 flex items-center justify-center bg-slate-900/50 ${iframeLoaded[currentVideo?.["ID File"] || ''] ? 'hidden' : 'block'}`}>
+                     <div className="flex flex-col items-center gap-4 text-indigo-500/50 animate-pulse">
+                       <Play className="w-12 h-12 fill-current" />
+                       <div className="h-2 w-24 bg-indigo-500/20 rounded-full" />
+                     </div>
+                  </div>
+
+                  <iframe
+                    key={`${currentVideo?.["ID File"]}-active`}
+                    src={getEmbedUrl(currentVideo?.["Link Preview"] || '')}
+                    className="absolute inset-0 w-full h-full z-10"
+                    allow="autoplay; fullscreen"
+                    frameBorder="0"
+                    onLoad={() => {
+                      if (currentVideo?.["ID File"]) {
+                        setIframeLoaded(prev => ({...prev, [currentVideo["ID File"]]: true}));
+                      }
+                    }}
+                  />
+                </motion.div>
               </AnimatePresence>
             </div>
 
@@ -569,17 +677,17 @@ export default function App() {
               <button 
                 onClick={goToPrev}
                 disabled={currentIndex === 0}
-                className="w-12 h-10 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center text-slate-400 disabled:opacity-20"
+                className="w-8 h-6 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center text-slate-400 disabled:opacity-20"
               >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="w-4 h-4" />
               </button>
               <div className="px-3 py-1 bg-slate-800/50 rounded-full text-[8px] font-black text-slate-500 uppercase tracking-widest">NAVIGASI</div>
               <button 
                 onClick={goToNext}
                 disabled={currentIndex === userVideos.length - 1}
-                className="w-12 h-10 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center text-slate-400 disabled:opacity-20"
+                className="w-8 h-6 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center text-slate-400 disabled:opacity-20"
               >
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -602,10 +710,10 @@ export default function App() {
                 <button
                   key={cat.id}
                   onClick={() => handleCategoryClick(cat)}
-                  className={`px-2 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[9px] md:text-xs tracking-tighter md:tracking-widest uppercase transition-all active:scale-95 border-2 flex items-center justify-center text-center leading-tight ${
+                  className={`px-2 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-[9px] md:text-sm tracking-tighter md:tracking-widest uppercase transition-all active:scale-95 border-2 flex flex-col items-center justify-center text-center leading-tight gap-1 md:gap-2 ${
                     currentVideo?.kategori === cat.name
-                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)]'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-indigo-500 hover:text-white'
+                      ? 'bg-indigo-600 border-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.3)] text-white'
+                      : 'bg-slate-900 border-slate-800 hover:border-indigo-500 text-slate-400 hover:text-white'
                   }`}
                 >
                   {cat.name}
