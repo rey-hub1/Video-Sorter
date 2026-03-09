@@ -15,6 +15,7 @@ import {
     Trash2,
     Save,
     PartyPopper,
+    ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -62,7 +63,21 @@ export default function App() {
                 setError("Gagal memuat kategori dari server.");
             }
         };
+
+        const loadAllVideos = async () => {
+            setIsLoadingStats(true);
+            try {
+                const data = await fetchVideos();
+                setAllVideos(data);
+            } catch (err) {
+                console.error("Initial Videos Load Error:", err);
+            } finally {
+                setIsLoadingStats(false);
+            }
+        };
+
         loadCategories();
+        loadAllVideos();
     }, []);
 
     // Handle Logout
@@ -76,9 +91,18 @@ export default function App() {
 
     const getUserStats = (user: string) => {
         if (allVideos.length === 0) return { done: 0, total: 0, percentage: 0 };
+
+        if (user === "Atmin") {
+            const done = allVideos.filter((v: VideoData) => v.kategori).length;
+            const percentage = Math.round((done / allVideos.length) * 100);
+            return { done, total: allVideos.length, percentage };
+        }
+
         const userIndex = USERS.indexOf(user);
+        const regularUsersCount = USERS.length - 1; // 6 users
         const totalVideos = allVideos.length;
-        const chunkSize = Math.ceil(totalVideos / USERS.length);
+        const chunkSize = Math.ceil(totalVideos / regularUsersCount);
+
         const start = userIndex * chunkSize;
         const end = Math.min(start + chunkSize, totalVideos);
         const userSegment = allVideos.slice(start, end);
@@ -110,15 +134,23 @@ export default function App() {
 
             setAllVideos(allData);
 
-            // Partition Logic: Divide array into 6 parts
-            const userIndex = USERS.indexOf(user);
-            const totalVideos = allData.length;
-            const chunkSize = Math.ceil(totalVideos / USERS.length);
+            let partitionedVideos;
+            if (user === "Atmin") {
+                partitionedVideos = allData.filter(
+                    (v: VideoData) => !v.kategori,
+                );
+            } else {
+                // Partition Logic: Divide array into 6 parts
+                const userIndex = USERS.indexOf(user);
+                const regularUsersCount = USERS.length - 1; // 6 users
+                const totalVideos = allData.length;
+                const chunkSize = Math.ceil(totalVideos / regularUsersCount);
 
-            const start = userIndex * chunkSize;
-            const end = Math.min(start + chunkSize, totalVideos);
+                const start = userIndex * chunkSize;
+                const end = Math.min(start + chunkSize, totalVideos);
 
-            const partitionedVideos = allData.slice(start, end);
+                partitionedVideos = allData.slice(start, end);
+            }
 
             setUserVideos(partitionedVideos);
             setActiveUser(user);
@@ -148,15 +180,24 @@ export default function App() {
             const allData = await fetchVideos();
             setAllVideos(allData);
 
-            // Partition Logic: Divide array into 6 parts
-            const userIndex = USERS.indexOf(activeUser);
-            const totalVideos = allData.length;
-            const chunkSize = Math.ceil(totalVideos / USERS.length);
+            let partitionedVideos;
+            if (activeUser === "Atmin") {
+                partitionedVideos = allData.filter(
+                    (v: VideoData) => !v.kategori,
+                );
+            } else {
+                // Partition Logic: Divide array into 6 parts
+                const userIndex = USERS.indexOf(activeUser);
+                const regularUsersCount = USERS.length - 1; // 6 users
+                const totalVideos = allData.length;
+                const chunkSize = Math.ceil(totalVideos / regularUsersCount);
 
-            const start = userIndex * chunkSize;
-            const end = Math.min(start + chunkSize, totalVideos);
+                const start = userIndex * chunkSize;
+                const end = Math.min(start + chunkSize, totalVideos);
 
-            const partitionedVideos = allData.slice(start, end);
+                partitionedVideos = allData.slice(start, end);
+            }
+
             setUserVideos(partitionedVideos);
 
             // Keep current index if valid, otherwise reset
@@ -397,48 +438,54 @@ export default function App() {
                                             {user}
                                         </span>
 
-                                        {allVideos.length > 0 &&
-                                            !isLoadingStats && (
-                                                <div
-                                                    className={`flex flex-col w-full px-4 gap-1.5 -mt-1 md:mt-0 ${isLoading ? "opacity-50" : ""}`}
-                                                >
-                                                    <div className="flex justify-between w-full text-[8px] md:text-[10px] font-black uppercase text-slate-500">
-                                                        <span>Progress</span>
-                                                        <span
-                                                            className={
-                                                                getUserStats(
-                                                                    user,
-                                                                ).percentage ===
-                                                                100
-                                                                    ? "text-emerald-500"
-                                                                    : "text-indigo-400"
-                                                            }
-                                                        >
-                                                            {
-                                                                getUserStats(
-                                                                    user,
-                                                                ).percentage
-                                                            }
-                                                            %
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full h-1.5 md:h-2 bg-slate-950/50 rounded-full overflow-hidden border border-slate-800/50">
-                                                        <motion.div
-                                                            initial={{
-                                                                width: 0,
-                                                            }}
-                                                            animate={{
-                                                                width: `${getUserStats(user).percentage}%`,
-                                                            }}
-                                                            transition={{
-                                                                duration: 1,
-                                                                ease: "easeOut",
-                                                            }}
-                                                            className={`h-full ${getUserStats(user).percentage === 100 ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-indigo-500 shadow-[0_0_10px_rgba(79,70,229,0.5)]"}`}
-                                                        />
-                                                    </div>
+                                        {!isLoadingStats &&
+                                        allVideos.length > 0 ? (
+                                            <div
+                                                className={`flex flex-col w-full px-4 gap-1.5 -mt-1 md:mt-0 ${isLoading ? "opacity-50" : ""}`}
+                                            >
+                                                <div className="flex justify-between w-full text-[8px] md:text-[10px] font-black uppercase text-slate-500">
+                                                    <span>Progress</span>
+                                                    <span
+                                                        className={
+                                                            getUserStats(user)
+                                                                .percentage ===
+                                                            100
+                                                                ? "text-emerald-500"
+                                                                : "text-indigo-400"
+                                                        }
+                                                    >
+                                                        {
+                                                            getUserStats(user)
+                                                                .percentage
+                                                        }
+                                                        %
+                                                    </span>
                                                 </div>
-                                            )}
+                                                <div className="w-full h-1.5 md:h-2 bg-slate-950/50 rounded-full overflow-hidden border border-slate-800/50">
+                                                    <motion.div
+                                                        initial={{
+                                                            width: 0,
+                                                        }}
+                                                        animate={{
+                                                            width: `${getUserStats(user).percentage}%`,
+                                                        }}
+                                                        transition={{
+                                                            duration: 1,
+                                                            ease: "easeOut",
+                                                        }}
+                                                        className={`h-full ${getUserStats(user).percentage === 100 ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-indigo-500 shadow-[0_0_10px_rgba(79,70,229,0.5)]"}`}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col w-full px-4 gap-2 -mt-1 md:mt-0">
+                                                <div className="flex justify-between w-full">
+                                                    <div className="w-12 h-2 bg-slate-800 rounded animate-pulse" />
+                                                    <div className="w-6 h-2 bg-slate-800 rounded animate-pulse" />
+                                                </div>
+                                                <div className="w-full h-1.5 md:h-2 bg-slate-800 rounded-full animate-pulse" />
+                                            </div>
+                                        )}
                                     </>
                                 )}
 
@@ -806,6 +853,19 @@ export default function App() {
                     </div>
 
                     <div className="flex items-center gap-2 md:gap-4">
+                        {currentVideo?.["Link Preview"] && (
+                            <a
+                                href={currentVideo["Link Preview"]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-3 md:px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 rounded-xl transition-all text-[8px] md:text-[10px] font-black uppercase tracking-widest group"
+                            >
+                                <ExternalLink className="w-3 h-3 group-hover:scale-110 transition-transform" />
+                                <span className="hidden sm:inline">
+                                    Buka di Drive
+                                </span>
+                            </a>
+                        )}
                         <button
                             onClick={() => setCurrentView("ManageCategory")}
                             className="flex items-center gap-2 px-3 md:px-4 py-2 bg-slate-800 hover:bg-indigo-500/20 hover:text-indigo-400 border border-slate-700 rounded-xl transition-all text-[8px] md:text-[10px] font-black uppercase tracking-widest group"
